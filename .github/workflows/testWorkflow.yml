@@ -33,6 +33,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: 'mailmunch/docker'
+          ref: 'master'
       - name: AWS Settings as mentioned here https://github.com/mailmunch/docker
         run: |
           echo "export AWS_REGION=us-east-1" >> ~/.zshenv
