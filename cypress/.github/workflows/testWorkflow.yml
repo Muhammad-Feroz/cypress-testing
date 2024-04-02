@@ -1,0 +1,213 @@
+name: Cypress CI Automation
+# Events that trigger the workflow
+on:
+  # schedule:
+  # runs tests every day at 9am https://crontab.guru/
+  # - cron: "0 9 * * *"
+  # Manual event allows users to trigger the workflow from GitHub UI or Github API with a custom user_name and branch_name input
+  workflow_dispatch:
+    inputs:
+      user_name:
+        type: string
+        description: "User Name"
+        required: true
+        default: "master"
+      branch_name:
+        type: string
+        description: "Branch Name"
+        required: true
+        default: "master"
+
+jobs:
+  # Setup job to clone repository, set environment variables, and start docker services
+  setup:
+    runs-on: ubuntu-20.04
+    timeout-minutes: 50
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_BUCKET: mailmunch-dev
+      Procfile: Procfile.docker
+    steps:
+      - name: Clone the repository from github
+        uses: actions/checkout@v4
+      - name: AWS Settings as mentioned here https://github.com/mailmunch/docker
+        run: |
+          echo "export AWS_REGION=us-east-1" >> ~/.zshenv
+          echo "export AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}" >> ~/.zshenv
+          echo "export AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}" >> ~/.zshenv
+          source ~/.zshenv
+      - name: Add host for local services
+        run: |
+          echo '127.0.0.1 local.mailmunch.co' | sudo tee -a /etc/hosts
+          echo '127.0.0.1 analytics.local.mailmunch.co' | sudo tee -a /etc/hosts
+          echo '127.0.0.1 wordpress.local.mailmunch.co' | sudo tee -a /etc/hosts
+          echo '127.0.0.1 shopify.local.mailmunch.co' | sudo tee -a /etc/hosts
+          echo '127.0.0.1 shopify-mailchimp.local.mailmunch.co' | sudo tee -a /etc/hosts
+          echo '127.0.0.1 wix-mailchimp.local.mailmunch.co' | sudo tee -a /etc/hosts
+          echo '127.0.0.1 wix.local.mailmunch.co' | sudo tee -a /etc/hosts
+          echo '127.0.0.1 wl.local.mailmunch.co' | sudo tee -a /etc/hosts
+          echo '127.0.0.1 shopify.local.page.co' | sudo tee -a /etc/hosts
+          echo '127.0.0.1 local.page.co' | sudo tee -a /etc/hosts
+          echo '127.0.0.1 wordpress.local.page.co' | sudo tee -a /etc/hosts
+          echo '127.0.0.1 ss.local.page.co' | sudo tee -a /etc/hosts
+          echo '127.0.0.1 partner-api.local.mailmunch.co' | sudo tee -a /etc/hosts
+          sudo cat /etc/hosts
+      - name: Clone all mailmunch repos using clone.sh script as mentioned https://github.com/mailmunch/docker
+        # Please add your github token in the clone-repos.sh script, for adding branch dynamically, pick it from the input ${{inputs.branch_name}}, and replace the master with it.
+        run: "sudo bash ./.github/scripts/clone-repos.sh master ${{ secrets.GITHUB_TOKEN }}"
+        shell: bash
+      - name: Start the docker services/containers
+        working-directory: ./docker
+        run: docker-compose up -d --build rails front-end-netlify graphql
+        # run: docker-compose up -d --build rails
+      - name: Run Migration
+        working-directory: ./docker
+        run: docker-compose run rails rails db:migrate
+      - name: Run Seed
+        working-directory: ./docker
+        run: docker-compose run rails rails db:seed
+      - name: Check which Docker containers are running, and their status
+        run: docker ps -a
+      # - name: Check Rails logs
+      #   working-directory: ./docker
+      #   run: docker-compose logs --tail 500 rails
+      # - name: Check Email Service logs
+      #   working-directory: ./docker
+      #   run: docker-compose logs --tail 500 email-service
+        # Set up ngrok for local testing
+      # - name: Install ngrok
+      #   run: |
+      #     curl -s https://ngrok-agent.s3.amazonaws.com/ngrok.asc \
+      #     | sudo tee /etc/apt/trusted.gpg.d/ngrok.asc >/dev/null && echo "deb https://ngrok-agent.s3.amazonaws.com buster main" \
+      #     | sudo tee /etc/apt/sources.list.d/ngrok.list && sudo apt update && sudo apt install ngrok
+      # - name: Configure ngrok
+      #   run: ngrok config add-authtoken 2e8qDQ0ik6Kq0zYVJvJH9q4QAlX_7Faim7afbY43SWiBASLd5
+      # - name: Start ngrok
+      #   timeout-minutes: 3
+      #   run: ngrok http --domain=set-lemming-primarily.ngrok-free.app --host-header=local.mailmunch.co 3001
+      # - name: Install jq
+      #   run: sudo apt-get update && sudo apt-get install -y jq
+      # - name: Rails logs
+      #   working-directory: ./docker
+      #   run: docker-compose logs --tail 300 rails
+        # - name: Start timestamp
+        #   run: date
+
+      # - name: Delay for 3 minutes
+      #   run: sleep 180
+      #   timeout-minutes: 3
+      #   continue-on-error: true
+
+      # - name: Rails logs
+      #   working-directory: ./docker
+      #   run: docker-compose logs --tail 300 rails
+
+      # - name: Check if server is running
+      #   run: ./.github/scripts/check-server.sh
+      #   continue-on-error: true
+      #   timeout-minutes: 15
+
+      # - name: Set ngrok URL
+      #   run: echo "NGROK_URL=$(./.github/scripts/generate-domain.sh)" >> $GITHUB_ENV
+      #   continue-on-error: true
+      # - name: Print NGROK_URL
+      #   run: echo $NGROK_URL
+      #   continue-on-error: true
+      # - name: Check Email Service logs
+      #   working-directory: ./docker
+      #   run: docker-compose logs --tail 500 email-service
+      # - name: Check Rails logs
+      #   working-directory: ./docker
+      #   run: docker-compose logs --tail 500 rails
+      # - name: Check if local server is running
+      #   continue-on-error: true
+      #   run: |
+      #     curl http://localhost:3000 || exit 1
+        # - name: Check if ngrok URL is working
+        #   run: |
+        #     curl --fail --silent --head $NGROK_URL || exit 1
+      - name: UI Tests - Chrome
+        # Maximum time for the step to execute before it is terminated.
+        timeout-minutes: 50
+        # Id of the step, which can be used to refer to the step in other steps
+        id: ci-tests
+        uses: cypress-io/github-action@v6
+        # env can be added on any level, step or job or workflow.
+        env:
+          CHROME_EXTRA_LAUNCH_ARGS: "--disable-gpu"
+        with:
+          working-directory: ../cypress
+          install: true
+          browser: chrome
+          wait-on: "http://local.mailmunch.co:3001"
+          wait-on-timeout: 600
+          spec: |
+            cypress/e2e/Test/test.spec.js
+        # Upload screenshots as an artifact if UI tests fail
+      - name: Check Rails logs
+        if: failure()
+        run: docker-compose logs --tail 300 rails
+        working-directory: ./docker
+      - uses: actions/upload-artifact@v3
+        if: failure()
+        with:
+          # how many days we need to keep the artifact
+          retention-days: 3
+          name: cypress-screenshots
+          path: cypress/screenshots
+          if-no-files-found: ignore # default is 'warn', ignore storing artifact if no files found
+      - name: Post to a Slack channel on success
+        id: slack-success
+        if: always() && (steps.ci-tests.outcome == 'success')
+        #https://slack.dev/node-slack-sdk/tutorials/local-development for local testing with slash slack command please follow this link
+        uses: slackapi/slack-github-action@v1.25.0
+        with:
+          channel-id: "C03KRFF5JUW"
+          # can design slack response using block-kit builder provided by slack https://app.slack.com/block-kit-builder
+          payload: |
+            {
+              "attachments": [
+                {
+                  "color": "#00FF00",
+                  "blocks": [
+                    {
+                      "type": "section",
+                      "text": {
+                        "type": "mrkdwn",
+                        "text": "Cypress-UI - Success"
+                      }
+                    },
+                    {
+                    "type": "section",
+                    "text": {
+                      "type": "mrkdwn",
+                      "text": "Branch - ${{ github.ref_name }}"
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+
+  # UI Test job to run Cypress tests
+  # ui-test:
+  #   needs: setup
+  #   runs-on: ubuntu-20.04
+  #   # Maximum time for the job to execute before it is terminated
+  #   timeout-minutes: 25
+  #   # Outputs that can be used by other jobs or workflow steps
+  #   outputs:
+  #     ci-tests-result: ${{ steps.ci-tests.outcome }}
+  #   steps:
+      
+
+  # Call Workflow job to send slack notification on failure of UI tests
+  # call-workflow:
+  #   needs: ui-test
+  #   if: always() && (needs.ui-test.outputs.ci-tests-result == 'failure')
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: ./.github/workflows/testWorkflow2.yml
