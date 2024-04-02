@@ -29,11 +29,12 @@ jobs:
       AWS_BUCKET: mailmunch-dev
       Procfile: Procfile.docker
     steps:
-      - name: Clone the repository from github
-        uses: actions/checkout@v4
+      - name: Clone the docker repository from mailmunch
+        uses: actions/checkout@v2
         with:
-          repository: 'mailmunch/docker'
-          ref: 'master'
+          repository: mailmunch/docker
+          ref: master
+          token: ${{ secrets.GITHUB_TOKEN }}
       - name: AWS Settings as mentioned here https://github.com/mailmunch/docker
         run: |
           echo "export AWS_REGION=us-east-1" >> ~/.zshenv
