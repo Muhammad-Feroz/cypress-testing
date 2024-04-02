@@ -32,7 +32,7 @@ jobs:
       - name: Clone the repository from github
         uses: actions/checkout@v4
         with:
-          repository: 'https://github.com/mailmunch/docker'
+          repository: 'mailmunch/docker'
       - name: AWS Settings as mentioned here https://github.com/mailmunch/docker
         run: |
           echo "export AWS_REGION=us-east-1" >> ~/.zshenv
